@@ -1,23 +1,150 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>My Document</title>
-    <style>
-        html, body {
-            margin: 0;
-            height: 100%;
-        }
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>PDF 页面</title>
+	<style>
+		:root {
+			--page-width: min(100%, 1100px);
+			--background: #e8e8e8;
+			--paper: #ffffff;
+			--text: #262626;
+			--muted: #707070;
+		}
 
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-    </style>
+		* {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			min-height: 100%;
+			background: var(--background);
+		}
+
+		body {
+			color: var(--text);
+			font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+		}
+
+		.status {
+			position: fixed;
+			inset: 0;
+			display: grid;
+			place-items: center;
+			padding: 24px;
+			color: var(--muted);
+			font-size: 15px;
+			text-align: center;
+		}
+
+		.pages {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 20px;
+			padding: 24px 16px 48px;
+		}
+
+		.page {
+			width: var(--page-width);
+			overflow: hidden;
+			flex: 0 0 auto;
+			background: var(--paper);
+			box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+		}
+
+		.page canvas {
+			display: block;
+			width: 100%;
+			height: auto;
+			background: var(--paper);
+		}
+
+		@media (max-width: 600px) {
+			.pages {
+				gap: 12px;
+				padding: 12px 0 28px;
+			}
+
+			.page {
+				width: 100%;
+				box-shadow: 0 1px 7px rgba(0, 0, 0, 0.14);
+			}
+		}
+
+		@media print {
+			.pages {
+				gap: 0;
+				padding: 0;
+			}
+
+			.page {
+				width: 100%;
+				box-shadow: none;
+				break-after: page;
+			}
+		}
+	</style>
 </head>
-
 <body>
-    <iframe src="annotated-GROUP1_STUDIO2_BRIEF3.pdf"></iframe>
+	<div id="status" class="status">正在加载 PDF...</div>
+	<main id="pages" class="pages" aria-live="polite"></main>
+
+	<script type="module">
+		import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+
+		const pdfFile = "annotated-GROUP1_STUDIO2_BRIEF3.pdf";
+		const pagesContainer = document.querySelector("#pages");
+		const status = document.querySelector("#status");
+
+		pdfjsLib.GlobalWorkerOptions.workerSrc =
+			"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+
+		loadPdf();
+
+		async function loadPdf() {
+			try {
+				const pdf = await pdfjsLib.getDocument(pdfFile).promise;
+
+				status.remove();
+				for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+					await renderPage(pdf, pageNumber);
+				}
+			} catch (error) {
+				console.error(error);
+				status.textContent = "PDF 加载失败。请通过本地服务器打开此 HTML 文件，并确认 PDF 与 HTML 位于同一目录。";
+			}
+		}
+
+		async function renderPage(pdf, pageNumber) {
+			const page = await pdf.getPage(pageNumber);
+			const pageElement = document.createElement("section");
+			const canvas = document.createElement("canvas");
+			const context = canvas.getContext("2d");
+			const pixelRatio = window.devicePixelRatio || 1;
+			const pageWidth = document.querySelector(".pages").clientWidth;
+			const originalViewport = page.getViewport({ scale: 1 });
+			const scale = pageWidth / originalViewport.width;
+			const viewport = page.getViewport({ scale });
+
+			pageElement.className = "page";
+			pageElement.dataset.page = pageNumber;
+			pageElement.append(canvas);
+			pagesContainer.append(pageElement);
+
+			canvas.width = Math.ceil(viewport.width * pixelRatio);
+			canvas.height = Math.ceil(viewport.height * pixelRatio);
+			canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
+
+			await page.render({
+				canvasContext: context,
+				viewport,
+				transform: [pixelRatio, 0, 0, pixelRatio, 0, 0]
+			}).promise;
+		}
+	</script>
 </body>
 </html>
